@@ -8,7 +8,7 @@ library(plotly)
 library(scales)
 
 # Load the JSON data
-btc_data <- fromJSON("./test.json")
+btc_data <- fromJSON("./sol-price.json")
 
 # Extract the price data
 price_data <- btc_data$prices
@@ -76,7 +76,7 @@ for (i in 2:nrow(hourly_df)) {
   
   # Calculate cumulative change in NAV
   cumulative_change_today <- calculate_cumulative_change(nav_today, initial_nav)
-  cumulative_changes <- c(cumulative_changes, round(cumulative_change_today * 100, 2))  # in percentage
+  cumulative_changes <- c(cumulative_changes, round(cumulative_change_today, 2))  # in percentage
   
   # Calculate actual leverage
   current_leverage <- calculate_actual_leverage(basket, price_today, nav_today, circulating_supply)
