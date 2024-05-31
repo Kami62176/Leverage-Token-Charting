@@ -10,6 +10,24 @@ library(scales)
 library(lubridate)
 
 
+btc_data = fromJSON("./priceData/btc-price.json")
+price_data <- btc_data$prices
+btc_df <- data.frame(timestamp = as.POSIXct(price_data[, 1] / 1000, origin = "1970-01-01"),
+                     price = price_data[, 2])
+
+eth_data = fromJSON("./priceData/eth-price.json")
+price_data <- eth_data$prices
+eth_df <- data.frame(timestamp = as.POSIXct(price_data[, 1] / 1000, origin = "1970-01-01"),
+                     price = price_data[, 2])
+
+sol_data = fromJSON("./priceData/sol-price.json")
+
+price_data <- sol_data$prices
+sol_df <- data.frame(timestamp = as.POSIXct(price_data[, 1] / 1000, origin = "1970-01-01"),
+                     price = price_data[, 2])
+
+
+
 # Function to interpolate hourly data
 interpolate_hourly <- function(df) {
   hourly_data <- data.frame()
@@ -39,6 +57,9 @@ calculate_cumulative_change <- function(nav, initial_nav) {
 calculate_actual_leverage <- function(basket, price, nav, circulating_supply) {
   return(round((basket * price) / (nav * circulating_supply), 2))
 }
+
+
+
 
 simulate_leverage <- function(hourly_df, leverage, lower, upper) {
   # Set initial parameters
@@ -140,9 +161,9 @@ server <- function(input, output) {
   # Load data based on the selected cryptocurrency
   load_crypto_data <- reactive({
     switch(input$crypto,
-           "btc" = fromJSON("./priceData/btc-price.json"),
-           "eth" = fromJSON("./priceData/eth-price.json"),
-           "sol" = fromJSON("./priceData/sol-price.json"))
+           "btc" = btc_df,
+           "eth" = eth_df,
+           "sol" = sol_df)
   })
   
   get_crypto_name <- reactive({
@@ -153,10 +174,7 @@ server <- function(input, output) {
   })
   
   result_data <- reactive({
-    crypto_data <- load_crypto_data()
-    price_data <- crypto_data$prices
-    df <- data.frame(timestamp = as.POSIXct(price_data[, 1] / 1000, origin = "1970-01-01"),
-                     price = price_data[, 2])
+    df <- load_crypto_data()
     hourly_df <- interpolate_hourly(df)
     leverage <- input$leverage
     LowerBound <- input$lowerBound
