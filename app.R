@@ -97,18 +97,7 @@ calculate_omega_ratio <- function(returns, threshold) {
   return(omega_ratio)
 }
 
-# Calculate Sharpe, Sortino, and Omega ratios
-calculate_risk_ratios <- function(nav, dates) {
-  # Calculate daily returns
-  returns <- calculate_daily_returns(nav)
-  
-  # Calculate risk ratios
-  sharpe <- calculate_sharpe_ratio(returns, risk_free_rate = 0.01 / 252)
-  sortino <- calculate_sortino_ratio(returns, risk_free_rate = 0.01 / 252,  mar = 0)
-  omega <- calculate_omega_ratio(returns, threshold = 0.01 / 252)
-  
-  list(sharpe = as.numeric(sharpe), sortino = as.numeric(sortino), omega = as.numeric(omega))
-}
+
 
 
 simulate_leverage <- function(hourly_df, leverage, lower, upper) {
@@ -152,14 +141,14 @@ simulate_leverage <- function(hourly_df, leverage, lower, upper) {
       
       # Recalculate actual leverage after rebalancing
       current_leverage <- calculate_actual_leverage(basket, price_today, nav_today, circulating_supply)
-      actual_leverages[length(actual_leverages)] <- current_leverage
+      #actual_leverages[length(actual_leverages)] <- current_leverage
     }
   }
   
   # Create a data frame to display the results
   hourly_results_df <- data.frame(
     Date = hourly_df$timestamp,
-    BTC_Price = hourly_df$price,
+    Price = hourly_df$price,
     NAV = navs,
     Cumulative_Change_in_NAV = cumulative_changes,
     Actual_Leverage = actual_leverages
@@ -170,7 +159,7 @@ simulate_leverage <- function(hourly_df, leverage, lower, upper) {
     mutate(Date = as.Date(Date)) %>%
     group_by(Date) %>%
     summarize(
-      BTC_Price = first(BTC_Price),
+      Price = first(Price),
       NAV = first(NAV),
       Cumulative_Change_in_NAV = first(Cumulative_Change_in_NAV),
       Actual_Leverage = first(Actual_Leverage)
@@ -190,17 +179,19 @@ ui <- fluidPage(
     sidebarPanel(
       selectInput("crypto", "Select Token: ", 
                   choices = list("Bitcoin" = "btc", "Ethereum" = "eth", "Solana" = "sol")),
+      HTML("<label>Min and Max Inputs Are 1-50</label>"),
       numericInput("leverage", "Leverage:", value = 2, min = 1, max = 50, step = 1),
-      numericInput("upperBound", "Upper Bound:", value = 0.2, min = 0.1, max = 50, step = 0.1),
-      numericInput("lowerBound", "Lower Bound:", value = 0.2, min = 0.1, max = 50, step = 0.1),
+      numericInput("upperBound", "Upper Bound Increment:", value = 0.2, min = 0.1, max = 50, step = 0.1),
+      numericInput("lowerBound", "Lower Bound Decrement:", value = 0.2, min = 0.1, max = 50, step = 0.1),
+      textOutput("current_range"),
       hr(),  # Add a horizontal line to separate the plot and the metrics
-      h3("Risk Ratios"),
-      verbatimTextOutput("sharpe_ratio"),
-      verbatimTextOutput("sortino_ratio"),
-      verbatimTextOutput("omega_ratio")
+      h3("Risk Adjusted Performance Ratios of NAV"),
+      textOutput("sharpe_ratio"),
+      textOutput("sortino_ratio"),
+      textOutput("omega_ratio")
     ),
     mainPanel(
-      plotlyOutput("btc_price_plot"),
+      plotlyOutput("price_plot"),
       plotlyOutput("nav_plot"),
       plotlyOutput("Cumulative_Change_in_NAV_plot"),
       plotlyOutput("leverage_plot")
@@ -239,10 +230,10 @@ server <- function(input, output) {
   })
   
   # BTC Price Plot
-  output$btc_price_plot <- renderPlotly({
+  output$price_plot <- renderPlotly({
     data <- result_data()
     chart_title <- get_crypto_name()
-    btc_price_plot <- ggplot(data, aes(x = Date, y = BTC_Price)) +
+    btc_price_plot <- ggplot(data, aes(x = Date, y = Price)) +
       geom_line(color = "blue") +
       scale_y_continuous(labels = scales::number_format(accuracy = 1)) +  # Whole numbers without scientific notation
       labs(title = chart_title, y = "Price (USD)") +
@@ -253,11 +244,11 @@ server <- function(input, output) {
   output$nav_plot <- renderPlotly({
     data <- result_data()
     leverage <- input$leverage
-    leverage_plot_title <- paste("Net Asset Value of", leverage,"x Bracketed Leverage Token")
+    nav_plot_title <- paste("Net Asset Value of", leverage,"x Bracketed Leverage Token")
     nav_plot <- ggplot(data, aes(x = Date, y = NAV)) +
       geom_line(color = "green") +
       scale_y_continuous(labels = scales::number_format(accuracy = 1)) +  # Whole numbers without scientific notation
-      labs(title = leverage_plot_title, y = "NAV") +
+      labs(title = nav_plot_title, y = "NAV") +
       theme_minimal()
   })
   
@@ -271,38 +262,50 @@ server <- function(input, output) {
       theme_minimal()
   })
   
+  # Current Range
+  output$current_range <- renderText({
+    leverage <- input$leverage
+    LowerBound <- leverage - input$lowerBound
+    UpperBound <- leverage + input$upperBound
+    paste("Leverage Range:", LowerBound, "-", UpperBound)
+  })
+  
   # Actual Leverage Plot
   output$leverage_plot <- renderPlotly({
     data <- result_data()
     leverage <- input$leverage
-    LowerBound <- input$lowerBound
-    UpperBound <- input$upperBound
+    LowerBound <- leverage - input$lowerBound
+    UpperBound <- leverage + input$upperBound
+    leverage_plot_title <- paste("Actual Leverage of Token in Range: ", LowerBound, "~", UpperBound, "x")
     leverage_plot <- ggplot(data, aes(x = Date, y = Actual_Leverage)) +
       geom_line(color = "red") +
       geom_hline(yintercept = leverage, linetype = "dashed", color = "grey") +
-      geom_hline(yintercept = (leverage + UpperBound), linetype = "dashed", color = "black") +
-      geom_hline(yintercept = (leverage - LowerBound), linetype = "dashed", color = "black") +
-      labs(title = "Actual Leverage of Token", y = "Actual Leverage") +
+      geom_hline(yintercept = UpperBound, linetype = "dashed", color = "black") +
+      geom_hline(yintercept = LowerBound, linetype = "dashed", color = "black") +
+      labs(title = leverage_plot_title, y = "Actual Leverage") +
       theme_minimal()
   })
   
   # Calculate and display risk ratios
-  output$sharpe_ratio <- renderPrint({
+  output$sharpe_ratio <- renderText({
     data <- result_data()
-    risk_ratios <- calculate_risk_ratios(data$NAV, data$Date)
-    paste("Sharpe Ratio:", round(risk_ratios$sharpe, 4))
+    returns <- calculate_daily_returns(data$NAV)
+    sharpe_ratio <- calculate_sharpe_ratio(returns, risk_free_rate = 0.01 / 252)
+    paste("Sharpe Ratio:", round(sharpe_ratio, 4))
   })
   
-  output$sortino_ratio <- renderPrint({
+  output$sortino_ratio <- renderText({
     data <- result_data()
-    risk_ratios <- calculate_risk_ratios(data$NAV, data$Date)
-    paste("Sortino Ratio:", round(risk_ratios$sortino, 4))
+    returns <- calculate_daily_returns(data$NAV)
+    sortino_ratio <- calculate_sortino_ratio(returns, risk_free_rate = 0.01 / 252, mar = 0)
+    paste("Sortino Ratio:", round(sortino_ratio, 4))
   })
   
-  output$omega_ratio <- renderPrint({
+  output$omega_ratio <- renderText({
     data <- result_data()
-    risk_ratios <- calculate_risk_ratios(data$NAV, data$Date)
-    paste("Omega Ratio:", round(risk_ratios$omega, 4))
+    returns <- calculate_daily_returns(data$NAV)
+    omega_ratio <- calculate_omega_ratio(returns, threshold = 0.01 / 252)
+    paste("Omega Ratio:", round(omega_ratio, 4))
   })
 }
 
