@@ -8,6 +8,9 @@ library(gridExtra)
 library(plotly)
 library(scales)
 library(lubridate)
+library(PerformanceAnalytics)
+library(quantmod)
+library(xts)
 
 
 btc_data = fromJSON("./priceData/btc-price.json")
@@ -58,7 +61,54 @@ calculate_actual_leverage <- function(basket, price, nav, circulating_supply) {
   return(round((basket * price) / (nav * circulating_supply), 2))
 }
 
+### CALCULATION FOR PROFORMANCE RATIOS
 
+calculate_daily_returns <- function(nav) {
+  returns <- diff(nav) / head(nav, -1)
+  return(returns)
+}
+
+calculate_sharpe_ratio <- function(returns, risk_free_rate = 0) {
+  mean_return <- mean(returns)
+  excess_return <- mean_return - risk_free_rate
+  sd_return <- sd(returns)
+  sharpe_ratio <- excess_return / sd_return
+  return(sharpe_ratio)
+}
+
+calculate_sortino_ratio <- function(returns, risk_free_rate = 0, mar = 0) {
+  downside_returns <- returns[returns < mar]
+  downside_deviation <- sd(downside_returns)
+  mean_return <- mean(returns)
+  excess_return <- mean_return - risk_free_rate
+  sortino_ratio <- excess_return / downside_deviation
+  return(sortino_ratio)
+}
+
+
+calculate_omega_ratio <- function(returns, threshold) {
+  positive_returns <- returns[returns > threshold]
+  negative_returns <- returns[returns <= threshold]
+  
+  gain_sum <- sum(positive_returns - threshold)
+  loss_sum <- sum(threshold - negative_returns)
+  
+  omega_ratio <- gain_sum / loss_sum
+  return(omega_ratio)
+}
+
+# Calculate Sharpe, Sortino, and Omega ratios
+calculate_risk_ratios <- function(nav, dates) {
+  # Calculate daily returns
+  returns <- calculate_daily_returns(nav)
+  
+  # Calculate risk ratios
+  sharpe <- calculate_sharpe_ratio(returns, risk_free_rate = 0.01 / 252)
+  sortino <- calculate_sortino_ratio(returns, risk_free_rate = 0.01 / 252,  mar = 0)
+  omega <- calculate_omega_ratio(returns, threshold = 0.01 / 252)
+  
+  list(sharpe = as.numeric(sharpe), sortino = as.numeric(sortino), omega = as.numeric(omega))
+}
 
 
 simulate_leverage <- function(hourly_df, leverage, lower, upper) {
@@ -142,13 +192,19 @@ ui <- fluidPage(
                   choices = list("Bitcoin" = "btc", "Ethereum" = "eth", "Solana" = "sol")),
       numericInput("leverage", "Leverage:", value = 2, min = 1, max = 50, step = 1),
       numericInput("upperBound", "Upper Bound:", value = 0.2, min = 0.1, max = 50, step = 0.1),
-      numericInput("lowerBound", "Lower Bound:", value = 0.2, min = 0.1, max = 50, step = 0.1)
+      numericInput("lowerBound", "Lower Bound:", value = 0.2, min = 0.1, max = 50, step = 0.1),
+      hr(),  # Add a horizontal line to separate the plot and the metrics
+      h3("Risk Ratios"),
+      verbatimTextOutput("sharpe_ratio"),
+      verbatimTextOutput("sortino_ratio"),
+      verbatimTextOutput("omega_ratio")
     ),
     mainPanel(
       plotlyOutput("btc_price_plot"),
       plotlyOutput("nav_plot"),
       plotlyOutput("Cumulative_Change_in_NAV_plot"),
       plotlyOutput("leverage_plot")
+
     )
   )
 )
@@ -228,6 +284,25 @@ server <- function(input, output) {
       geom_hline(yintercept = (leverage - LowerBound), linetype = "dashed", color = "black") +
       labs(title = "Actual Leverage of Token", y = "Actual Leverage") +
       theme_minimal()
+  })
+  
+  # Calculate and display risk ratios
+  output$sharpe_ratio <- renderPrint({
+    data <- result_data()
+    risk_ratios <- calculate_risk_ratios(data$NAV, data$Date)
+    paste("Sharpe Ratio:", round(risk_ratios$sharpe, 4))
+  })
+  
+  output$sortino_ratio <- renderPrint({
+    data <- result_data()
+    risk_ratios <- calculate_risk_ratios(data$NAV, data$Date)
+    paste("Sortino Ratio:", round(risk_ratios$sortino, 4))
+  })
+  
+  output$omega_ratio <- renderPrint({
+    data <- result_data()
+    risk_ratios <- calculate_risk_ratios(data$NAV, data$Date)
+    paste("Omega Ratio:", round(risk_ratios$omega, 4))
   })
 }
 
