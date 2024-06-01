@@ -7,10 +7,8 @@ library(jsonlite)
 library(gridExtra)
 library(plotly)
 library(scales)
-library(lubridate)
-library(PerformanceAnalytics)
-library(quantmod)
-library(xts)
+
+
 
 
 btc_data = fromJSON("./priceData/btc-price.json")

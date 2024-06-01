@@ -12,14 +12,11 @@ RUN apt-get update && apt-get install -y \
 
 # Install R packages required by the application
 
-RUN R -e "install.packages('ggplot2', repos='https://cloud.r-project.org/')"
-RUN R -e "install.packages('dplyr', repos='https://cloud.r-project.org/')"
-RUN R -e "install.packages('jsonlite', repos='https://cloud.r-project.org/')"
-RUN R -e "install.packages('gridExtra', repos='https://cloud.r-project.org/')"
-RUN R -e "install.packages('plotly', repos='https://cloud.r-project.org/')"
-RUN R -e "install.packages('scales', repos='https://cloud.r-project.org/')"
-RUN R -e "install.packages('lubridate', repos='https://cloud.r-project.org/')"
-RUN R -e "install.packages('devtools', repos='https://cloud.r-project.org/')"
+
+
+
+
+RUN R -e "install.packages(c('ggplot2', 'gridExtra', 'jsonlite', 'plotly', 'dplyr', 'scales', 'devtools'), repos='https://cloud.r-project.org/')"
 
 # Copy the application code to the Docker image
 COPY . /srv/shiny-server/
