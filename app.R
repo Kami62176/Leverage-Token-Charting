@@ -8,7 +8,7 @@ library(gridExtra)
 library(plotly)
 library(scales)
 
-
+### DATA ACCESS
 
 
 btc_data = fromJSON("./priceData/btc-price.json")
@@ -59,7 +59,9 @@ calculate_actual_leverage <- function(basket, price, nav, circulating_supply) {
   return(round((basket * price) / (nav * circulating_supply), 2))
 }
 
+
 ### CALCULATION FOR PROFORMANCE RATIOS
+
 
 calculate_daily_returns <- function(nav) {
   returns <- diff(nav) / head(nav, -1)
@@ -83,7 +85,6 @@ calculate_sortino_ratio <- function(returns, risk_free_rate = 0, mar = 0) {
   return(sortino_ratio)
 }
 
-
 calculate_omega_ratio <- function(returns, threshold) {
   positive_returns <- returns[returns > threshold]
   negative_returns <- returns[returns <= threshold]
@@ -96,6 +97,7 @@ calculate_omega_ratio <- function(returns, threshold) {
 }
 
 
+### MAIN SIMULATION FUNCTION
 
 
 simulate_leverage <- function(hourly_df, leverage, lower, upper) {
@@ -164,21 +166,24 @@ simulate_leverage <- function(hourly_df, leverage, lower, upper) {
   )
   return(daily_results_df)
 }
-# Plotting the results using ggplot2
 
+### SERVER CONFIGURATIONS
 
 options(shiny.host = "0.0.0.0")
 options(shiny.port = 8180)
 
-# Define UI
+### UI STUFF
+
 ui <- fluidPage(
   titlePanel("Bracketed Leverage Token Simulation"),
   sidebarLayout(
     sidebarPanel(
       selectInput("crypto", "Select Token: ", 
                   choices = list("Bitcoin" = "btc", "Ethereum" = "eth", "Solana" = "sol")),
+      dateInput("start_date", "Start Date:", value = "2023-10-21"),
+      dateInput("end_date", "End Date:", value = "2024-03-05"),
       HTML("<label>Min and Max Inputs Are 1-50</label>"),
-      numericInput("leverage", "Leverage:", value = 2, min = 1, max = 50, step = 1),
+      numericInput("leverage", "Leverage:", value = 3, min = 1, max = 50, step = 1),
       numericInput("upperBound", "Upper Bound Increment:", value = 0.2, min = 0.1, max = 50, step = 0.1),
       numericInput("lowerBound", "Lower Bound Decrement:", value = 0.2, min = 0.1, max = 50, step = 0.1),
       textOutput("current_range"),
@@ -200,7 +205,7 @@ ui <- fluidPage(
 
 
 
-# Define server logic
+### MAIN SERVER LOGIC
 server <- function(input, output) {
   
   # Load data based on the selected cryptocurrency
@@ -218,8 +223,15 @@ server <- function(input, output) {
            "sol" = "Solana Price")
   })
   
+  filtered_data <- reactive({
+    crypto_df <- load_crypto_data()
+    crypto_df <- crypto_df %>%
+      filter(timestamp >= as.POSIXct(input$start_date) & timestamp <= as.POSIXct(input$end_date))
+    crypto_df
+  })
+  
   result_data <- reactive({
-    df <- load_crypto_data()
+    df <- filtered_data()
     hourly_df <- interpolate_hourly(df)
     leverage <- input$leverage
     LowerBound <- input$lowerBound
