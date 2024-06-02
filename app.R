@@ -1,12 +1,13 @@
 
 # Load necessary libraries
 library(shiny)
-library(ggplot2)
-library(dplyr)
+library(shinyBS)
 library(jsonlite)
-library(gridExtra)
+library(ggplot2)
 library(plotly)
 library(scales)
+library(gridExtra)
+library(dplyr)
 
 ### DATA ACCESS
 
@@ -175,6 +176,10 @@ options(shiny.port = 8180)
 ### UI STUFF
 
 ui <- fluidPage(
+  tags$head(
+    tags$link(rel = "stylesheet", type="text/css", href = "./styling.css")
+  ),
+  
   titlePanel("Bracketed Leverage Token Simulation"),
   sidebarLayout(
     sidebarPanel(
@@ -182,17 +187,21 @@ ui <- fluidPage(
                   choices = list("Bitcoin" = "btc", "Ethereum" = "eth", "Solana" = "sol")),
       dateInput("start_date", "Start Date:", value = "2023-10-21"),
       dateInput("end_date", "End Date:", value = "2024-03-05"),
-      HTML("<label>Min and Max Inputs Are 1-50</label>"),
       numericInput("leverage", "Leverage:", value = 3, min = 1, max = 50, step = 1),
       numericInput("upperBound", "Upper Bound Increment:", value = 0.2, min = 0.1, max = 50, step = 0.1),
       numericInput("lowerBound", "Lower Bound Decrement:", value = 0.2, min = 0.1, max = 50, step = 0.1),
+      bsTooltip(list("upperBound", "lowerBound", "leverage"), 
+                "Values can range from 1 - 50", 
+                "right"),
       textOutput("current_range"),
       hr(),  # Add a horizontal line to separate the plot and the metrics
       h3("Risk Adjusted Performance Ratios of NAV"),
       textOutput("sharpe_ratio"),
       textOutput("sortino_ratio"),
-      textOutput("omega_ratio")
+      textOutput("omega_ratio"),
+      h4("Notice: This simulation does not take into consideration the transaction fees of rebalancing.")
     ),
+    
     mainPanel(
       plotlyOutput("price_plot"),
       plotlyOutput("nav_plot"),
@@ -207,6 +216,7 @@ ui <- fluidPage(
 
 ### MAIN SERVER LOGIC
 server <- function(input, output) {
+
   
   # Load data based on the selected cryptocurrency
   load_crypto_data <- reactive({
@@ -260,6 +270,7 @@ server <- function(input, output) {
       scale_y_continuous(labels = scales::number_format(accuracy = 1)) +  # Whole numbers without scientific notation
       labs(title = nav_plot_title, y = "NAV") +
       theme_minimal()
+    ggplotly(nav_plot)
   })
   
   # Cumulative Change in NAV Plot
