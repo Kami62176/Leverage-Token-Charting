@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y \
 
 
 
-RUN R -e "install.packages(c('ggplot2', 'gridExtra', 'jsonlite', 'plotly', 'dplyr', 'scales', 'devtools'), repos='https://cloud.r-project.org/')"
+RUN R -e "install.packages(c('shinyBS', 'ggplot2', 'gridExtra', 'jsonlite', 'plotly', 'dplyr', 'scales', 'devtools'), repos='https://cloud.r-project.org/')"
 
 # Copy the application code to the Docker image
 COPY . /srv/shiny-server/
