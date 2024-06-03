@@ -8,7 +8,7 @@ docker build -t shinyapp .
 
 docker run -p 8180:8180 -name leverage_simulation shinyapp
 
-A list of things I want to add:
+Things to-do:
 - All price history of all assets
 - More tokens to select from
-- Date ranges to isolate different areas of time
+- Have multiple tokens on a chart to compare performance
