@@ -98,75 +98,7 @@ calculate_omega_ratio <- function(returns, threshold) {
 }
 
 
-### MAIN SIMULATION FUNCTION
 
-
-simulate_leverage <- function(hourly_df, leverage, lower, upper) {
-  # Set initial parameters
-  initial_nav <- 10
-  initial_price <- hourly_df$price[1]
-  basket <- 300
-  circulating_supply <- 400000
-  target_leverage <- leverage
-  current_leverage <- target_leverage
-  # Initialize lists to store the results
-  navs <- c(initial_nav)
-  cumulative_changes <- c(0)
-  actual_leverages <- c(target_leverage)
-  
-  # Simulate hour-by-hour changes
-  for (i in 2:nrow(hourly_df)) {
-    price_today <- hourly_df$price[i]
-    price_yesterday <- hourly_df$price[i-1]
-    price_change <- (price_today - price_yesterday) / price_yesterday
-    
-    # Calculate NAV for today
-    nav_today <- calculate_nav(navs[i-1], current_leverage, price_change)
-    navs <- c(navs, nav_today)
-    
-    # Calculate cumulative change in NAV
-    cumulative_change_today <- calculate_cumulative_change(nav_today, initial_nav)
-    cumulative_changes <- c(cumulative_changes, cumulative_change_today)  # in percentage
-    
-    # Calculate actual leverage
-    current_leverage <- calculate_actual_leverage(basket, price_today, nav_today, circulating_supply)
-    actual_leverages <- c(actual_leverages, current_leverage)
-    
-    # Check if rebalancing is needed
-    if (current_leverage >= target_leverage + upper 
-        || current_leverage <= target_leverage - lower) {  # Rebalancing threshold
-      target_position <- nav_today * circulating_supply * target_leverage
-      current_position <- basket * price_today
-      rebalance_position <- (target_position - current_position) / price_today
-      basket <- basket + rebalance_position  # Adjust basket size
-      
-      # Recalculate actual leverage after rebalancing
-      current_leverage <- calculate_actual_leverage(basket, price_today, nav_today, circulating_supply)
-      #actual_leverages[length(actual_leverages)] <- current_leverage
-    }
-  }
-  
-  # Create a data frame to display the results
-  hourly_results_df <- data.frame(
-    Date = hourly_df$timestamp,
-    Price = hourly_df$price,
-    NAV = navs,
-    Cumulative_Change_in_NAV = cumulative_changes,
-    Actual_Leverage = actual_leverages
-  )
-  
-  # Aggregate the results to daily data
-  daily_results_df <- hourly_results_df %>%
-    mutate(Date = as.Date(Date)) %>%
-    group_by(Date) %>%
-    summarize(
-      Price = first(Price),
-      NAV = first(NAV),
-      Cumulative_Change_in_NAV = first(Cumulative_Change_in_NAV),
-      Actual_Leverage = first(Actual_Leverage)
-  )
-  return(daily_results_df)
-}
 
 ### SERVER CONFIGURATIONS
 
@@ -194,6 +126,12 @@ ui <- fluidPage(
                 "Values can range from 1 - 50", 
                 "right"),
       textOutput("current_range"),
+      
+      hr(),
+      #h3("Rebalancing Inputs"),
+      #numericInput("fee_percentage", "Fee Percentage:", value = 0.1, min = 0, max = 50, step = 0.01),
+      textOutput("rebalancing_count"),
+      
       hr(),  # Add a horizontal line to separate the plot and the metrics
       h3("Risk Adjusted Performance Ratios of NAV"),
       textOutput("sharpe_ratio"),
@@ -213,10 +151,8 @@ ui <- fluidPage(
 )
 
 
-
 ### MAIN SERVER LOGIC
 server <- function(input, output) {
-
   
   # Load data based on the selected cryptocurrency
   load_crypto_data <- reactive({
@@ -248,6 +184,79 @@ server <- function(input, output) {
     UpperBound <- input$upperBound
     simulation_data <- simulate_leverage(hourly_df, leverage, LowerBound, UpperBound)
   })
+  
+  ### MAIN SIMULATION FUNCTION
+  
+  simulate_leverage <- function(hourly_df, leverage, lower, upper) {
+    # Set initial parameters
+    initial_nav <- 10
+    initial_price <- hourly_df$price[1]
+    basket <- 300
+    circulating_supply <- 400000
+    target_leverage <- leverage
+    current_leverage <- target_leverage
+    # Initialize lists to store the results
+    rebalancing_count <- 0
+    navs <- c(initial_nav)
+    cumulative_changes <- c(0)
+    actual_leverages <- c(target_leverage)
+    
+    # Simulate hour-by-hour changes
+    for (i in 2:nrow(hourly_df)) {
+      price_today <- hourly_df$price[i]
+      price_yesterday <- hourly_df$price[i-1]
+      price_change <- (price_today - price_yesterday) / price_yesterday
+      
+      # Calculate NAV for today
+      nav_today <- calculate_nav(navs[i-1], current_leverage, price_change)
+      navs <- c(navs, nav_today)
+      
+      # Calculate cumulative change in NAV
+      cumulative_change_today <- calculate_cumulative_change(nav_today, initial_nav)
+      cumulative_changes <- c(cumulative_changes, cumulative_change_today)  # in percentage
+      
+      # Calculate actual leverage
+      current_leverage <- calculate_actual_leverage(basket, price_today, nav_today, circulating_supply)
+      actual_leverages <- c(actual_leverages, current_leverage)
+      
+      # Check if rebalancing is needed
+      if (current_leverage >= target_leverage + upper 
+          || current_leverage <= target_leverage - lower) {  # Rebalancing threshold
+        rebalancing_count <- rebalancing_count + 1
+        target_position <- nav_today * circulating_supply * target_leverage
+        current_position <- basket * price_today
+        
+        rebalance_position <- (target_position - current_position) / price_today
+        basket <- basket + rebalance_position  # Adjust basket size
+        
+        # Recalculate actual leverage after rebalancing
+        current_leverage <- calculate_actual_leverage(basket, price_today, nav_today, circulating_supply)
+        #actual_leverages[length(actual_leverages)] <- current_leverage
+      }
+    }
+    
+    # Create a data frame to display the results
+    hourly_results_df <- data.frame(
+      Date = hourly_df$timestamp,
+      Price = hourly_df$price,
+      NAV = navs,
+      Cumulative_Change_in_NAV = cumulative_changes,
+      Actual_Leverage = actual_leverages
+    )
+    
+    # Aggregate the results to daily data
+    daily_results_df <- hourly_results_df %>%
+      mutate(Date = as.Date(Date)) %>%
+      group_by(Date) %>%
+      summarize(
+        Price = first(Price),
+        NAV = first(NAV),
+        Cumulative_Change_in_NAV = first(Cumulative_Change_in_NAV),
+        Actual_Leverage = first(Actual_Leverage),
+        rebalancing_count = rebalancing_count
+      )
+    return(daily_results_df)
+  }
   
   # BTC Price Plot
   output$price_plot <- renderPlotly({
@@ -328,6 +337,14 @@ server <- function(input, output) {
     omega_ratio <- calculate_omega_ratio(returns, threshold = 0.01 / 252)
     paste("Omega Ratio:", round(omega_ratio, 4))
   })
+  
+  output$rebalancing_count <- renderText({
+    data <- result_data()
+    paste("Number of Rebalances:", data$rebalancing_count[1])
+  })
+  
+  
+
 }
 
 # Run the application 
