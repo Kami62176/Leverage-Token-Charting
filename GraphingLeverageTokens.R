@@ -8,7 +8,7 @@ library(plotly)
 library(scales)
 
 # Load the JSON data
-btc_data <- fromJSON("./sol-price.json")
+btc_data <- fromJSON("./priceData/btc-price.json")
 
 # Extract the price data
 price_data <- btc_data$prices
@@ -32,7 +32,7 @@ interpolate_hourly <- function(df) {
   return(hourly_data)
 }
 # Generate hourly data
-hourly_df <- df #interpolate_hourly(df)
+hourly_df <- interpolate_hourly(df)
 
 #### Simulation 
 
@@ -42,9 +42,11 @@ initial_nav <- 10
 initial_price <- df$price[1]
 basket <- 300
 circulating_supply <- 400000
-target_leverage <- 3
+target_leverage <- 5
 current_leverage <- target_leverage
 leverage_range <- 1
+upper_bound <- 1.33
+lower_bound <- 0.8
 
 # Define calculation functions
 calculate_nav <- function(initial_nav, leverage, price_change) {
@@ -72,19 +74,19 @@ for (i in 2:nrow(hourly_df)) {
   
   # Calculate NAV for today
   nav_today <- calculate_nav(navs[i-1], current_leverage, price_change)
-  navs <- c(navs, round(nav_today,2))
+  navs <- c(navs, nav_today)
   
   # Calculate cumulative change in NAV
   cumulative_change_today <- calculate_cumulative_change(nav_today, initial_nav)
-  cumulative_changes <- c(cumulative_changes, round(cumulative_change_today, 2))  # in percentage
+  cumulative_changes <- c(cumulative_changes, cumulative_change_today)  # in percentage
   
   # Calculate actual leverage
   current_leverage <- calculate_actual_leverage(basket, price_today, nav_today, circulating_supply)
   actual_leverages <- c(actual_leverages, current_leverage)
   
   # Check if rebalancing is needed
-  if (current_leverage > target_leverage + leverage_range 
-      || current_leverage < target_leverage - leverage_range) {  # Rebalancing threshold
+  if (current_leverage > target_leverage + upper_bound 
+      || current_leverage < target_leverage - lower_bound) {  # Rebalancing threshold
     target_position <- nav_today * circulating_supply * target_leverage
     current_position <- basket * price_today
     rebalance_position <- (target_position - current_position) / price_today
@@ -92,7 +94,7 @@ for (i in 2:nrow(hourly_df)) {
     
     # Recalculate actual leverage after rebalancing
     current_leverage <- calculate_actual_leverage(basket, price_today, nav_today, circulating_supply)
-    actual_leverages[length(actual_leverages)] <- round(current_leverage, 2)
+    actual_leverages[length(actual_leverages)] <- current_leverage
   }
 }
 
@@ -105,17 +107,17 @@ results_df <- data.frame(
   Actual_Leverage = actual_leverages
 )
 
-daily_results_df <-results_df
+#daily_results_df <-results_df
 ## Aggregate the results to daily data
-#daily_results_df <- results_df %>%
-#  mutate(Date = as.Date(Date)) %>%
-#  group_by(Date) %>%
-#  summarize(
-#    BTC_Price = first(BTC_Price),
-#    NAV = first(NAV),
-#    Cumulative_Change_in_NAV = first(Cumulative_Change_in_NAV),
-#    Actual_Leverage = first(Actual_Leverage)
-#  )
+daily_results_df <- results_df %>%
+  mutate(Date = as.Date(Date)) %>%
+  group_by(Date) %>%
+  summarize(
+    BTC_Price = first(BTC_Price),
+    NAV = first(NAV),
+    Cumulative_Change_in_NAV = first(Cumulative_Change_in_NAV),
+    Actual_Leverage = first(Actual_Leverage)
+  )
 
 # Plotting the results using ggplot2
 
@@ -131,7 +133,7 @@ leverage_plot_title <- paste("Net Asset Value of", target_leverage,"x Leverage T
 
 nav_plot <- ggplot(daily_results_df, aes(x = Date, y = NAV)) +
   geom_line(color = "green") +
-  scale_y_log10() + 
+  scale_y_continuous(labels = scales::number_format(accuracy = 1)) +  # Whole numbers without scientific notation
   labs(title = leverage_plot_title, y = "NAV") +
   theme_minimal()
 
@@ -165,3 +167,4 @@ interactive_plots <- subplot(btc_price_plotly, nav_plotly, leverage_plotly, cumu
 
 # Print the interactive plots to ensure they are displayed
 print(interactive_plots)
+

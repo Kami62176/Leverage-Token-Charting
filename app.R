@@ -12,17 +12,17 @@ library(dplyr)
 ### DATA ACCESS
 
 
-btc_data = fromJSON("./priceData/btc-price.json")
+btc_data = fromJSON("./priceData/btc-hour-price.json")
 price_data <- btc_data$prices
 btc_df <- data.frame(timestamp = as.POSIXct(price_data[, 1] / 1000, origin = "1970-01-01"),
                      price = price_data[, 2])
 
-eth_data = fromJSON("./priceData/eth-price.json")
+eth_data = fromJSON("./priceData/eth-hour-price.json")
 price_data <- eth_data$prices
 eth_df <- data.frame(timestamp = as.POSIXct(price_data[, 1] / 1000, origin = "1970-01-01"),
                      price = price_data[, 2])
 
-sol_data = fromJSON("./priceData/sol-price.json")
+sol_data = fromJSON("./priceData/sol-hour-price.json")
 
 price_data <- sol_data$prices
 sol_df <- data.frame(timestamp = as.POSIXct(price_data[, 1] / 1000, origin = "1970-01-01"),
@@ -49,7 +49,7 @@ interpolate_hourly <- function(df) {
 
 # Define calculation functions
 calculate_nav <- function(initial_nav, leverage, price_change) {
-  return(round(initial_nav * (1 + (leverage * price_change)),2))
+  return(initial_nav * (1 + (leverage * price_change)))
 }
 
 calculate_cumulative_change <- function(nav, initial_nav) {
@@ -57,7 +57,7 @@ calculate_cumulative_change <- function(nav, initial_nav) {
 }
 
 calculate_actual_leverage <- function(basket, price, nav, circulating_supply) {
-  return(round((basket * price) / (nav * circulating_supply), 2))
+  return((basket * price) / (nav * circulating_supply))
 }
 
 
@@ -117,19 +117,19 @@ ui <- fluidPage(
     sidebarPanel(
       selectInput("crypto", "Select Token: ", 
                   choices = list("Bitcoin" = "btc", "Ethereum" = "eth", "Solana" = "sol")),
-      dateInput("start_date", "Start Date:", value = "2023-10-21"),
-      dateInput("end_date", "End Date:", value = "2024-03-05"),
-      numericInput("leverage", "Leverage:", value = 3, min = 1, max = 50, step = 1),
-      numericInput("upperBound", "Upper Bound Increment:", value = 0.2, min = 0.1, max = 50, step = 0.1),
-      numericInput("lowerBound", "Lower Bound Decrement:", value = 0.2, min = 0.1, max = 50, step = 0.1),
+      dateInput("start_date", "Start Date:", value = "2018-01-01"),
+      dateInput("end_date", "End Date:", value = "2021-01-08"),
+      numericInput("leverage", "Leverage:", value = 5, min = 1, max = 50, step = 1),
+      numericInput("upperBound", "Upper Bound Increment:", value = 1.33, min = 0.1, max = 50, step = 0.1),
+      numericInput("lowerBound", "Lower Bound Decrement:", value = 0.8, min = 0.1, max = 50, step = 0.1),
       bsTooltip(list("upperBound", "lowerBound", "leverage"), 
                 "Values can range from 1 - 50", 
                 "right"),
       textOutput("current_range"),
       
       hr(),
-      #h3("Rebalancing Inputs"),
-      #numericInput("fee_percentage", "Fee Percentage:", value = 0.1, min = 0, max = 50, step = 0.01),
+      h3("Rebalancing Inputs"),
+      numericInput("fee_percentage", "Fee Percentage:", value = 0.1, min = 0, max = 50, step = 0.01),
       textOutput("rebalancing_count"),
       
       hr(),  # Add a horizontal line to separate the plot and the metrics
@@ -178,16 +178,17 @@ server <- function(input, output) {
   
   result_data <- reactive({
     df <- filtered_data()
-    hourly_df <- interpolate_hourly(df)
+    hourly_df <- df #interpolate_hourly(df)
     leverage <- input$leverage
     LowerBound <- input$lowerBound
     UpperBound <- input$upperBound
-    simulation_data <- simulate_leverage(hourly_df, leverage, LowerBound, UpperBound)
+    percentage_fee <- input$fee_percentage
+    simulation_data <- simulate_leverage(hourly_df, leverage, LowerBound, UpperBound, percentage_fee)
   })
   
   ### MAIN SIMULATION FUNCTION
   
-  simulate_leverage <- function(hourly_df, leverage, lower, upper) {
+  simulate_leverage <- function(hourly_df, leverage, lower, upper, rebalancing_fee) {
     # Set initial parameters
     initial_nav <- 10
     initial_price <- hourly_df$price[1]
@@ -223,8 +224,10 @@ server <- function(input, output) {
       if (current_leverage >= target_leverage + upper 
           || current_leverage <= target_leverage - lower) {  # Rebalancing threshold
         rebalancing_count <- rebalancing_count + 1
-        target_position <- nav_today * circulating_supply * target_leverage
         current_position <- basket * price_today
+        fee <- current_position * rebalancing_fee
+        
+        target_position <- nav_today * circulating_supply * target_leverage
         
         rebalance_position <- (target_position - current_position) / price_today
         basket <- basket + rebalance_position  # Adjust basket size
