@@ -12,17 +12,17 @@ library(dplyr)
 ### DATA ACCESS
 
 
-btc_data = fromJSON("./priceData/btc-hour-price.json")
+btc_data = fromJSON("./priceData/btc-price.json")
 price_data <- btc_data$prices
 btc_df <- data.frame(timestamp = as.POSIXct(price_data[, 1] / 1000, origin = "1970-01-01"),
                      price = price_data[, 2])
 
-eth_data = fromJSON("./priceData/eth-hour-price.json")
+eth_data = fromJSON("./priceData/eth-price.json")
 price_data <- eth_data$prices
 eth_df <- data.frame(timestamp = as.POSIXct(price_data[, 1] / 1000, origin = "1970-01-01"),
                      price = price_data[, 2])
 
-sol_data = fromJSON("./priceData/sol-hour-price.json")
+sol_data = fromJSON("./priceData/sol-price.json")
 
 price_data <- sol_data$prices
 sol_df <- data.frame(timestamp = as.POSIXct(price_data[, 1] / 1000, origin = "1970-01-01"),
@@ -53,7 +53,7 @@ calculate_nav <- function(initial_nav, leverage, price_change) {
 }
 
 calculate_cumulative_change <- function(nav, initial_nav) {
-  return(round(((nav - initial_nav) / initial_nav), 2))
+  return(round(((nav - initial_nav) / initial_nav), 4))
 }
 
 calculate_actual_leverage <- function(basket, price, nav, circulating_supply) {
@@ -117,8 +117,8 @@ ui <- fluidPage(
     sidebarPanel(
       selectInput("crypto", "Select Token: ", 
                   choices = list("Bitcoin" = "btc", "Ethereum" = "eth", "Solana" = "sol")),
-      dateInput("start_date", "Start Date:", value = "2018-01-01"),
-      dateInput("end_date", "End Date:", value = "2021-01-08"),
+      dateInput("start_date", "Start Date:", value = "2020-02-10"),
+      dateInput("end_date", "End Date:", value = "2021-11-30"),
       numericInput("leverage", "Leverage:", value = 5, min = 1, max = 50, step = 1),
       numericInput("upperBound", "Upper Bound Increment:", value = 1.33, min = 0.1, max = 50, step = 0.1),
       numericInput("lowerBound", "Lower Bound Decrement:", value = 0.8, min = 0.1, max = 50, step = 0.1),
@@ -279,7 +279,7 @@ server <- function(input, output) {
     nav_plot_title <- paste("Net Asset Value of", leverage,"x Bracketed Leverage Token")
     nav_plot <- ggplot(data, aes(x = Date, y = NAV)) +
       geom_line(color = "green") +
-      scale_y_continuous(labels = scales::number_format(accuracy = 1)) +  # Whole numbers without scientific notation
+      scale_y_log10(labels = scales::number_format(accuracy = 1)) +  # Whole numbers without scientific notation
       labs(title = nav_plot_title, y = "NAV") +
       theme_minimal()
     ggplotly(nav_plot)
