@@ -12,23 +12,30 @@ library(dplyr)
 ### DATA ACCESS
 
 
-btc_data = fromJSON("./priceData/btc-price.json")
+#btc_data = fromJSON("./price-data/daily/btc-price.json")
+btc_data = fromJSON("./price-data/hourly/btc-hour-price.json")
 price_data <- btc_data$prices
 btc_df <- data.frame(timestamp = as.POSIXct(price_data[, 1] / 1000, origin = "1970-01-01"),
                      price = price_data[, 2])
 
-eth_data = fromJSON("./priceData/eth-price.json")
+#eth_data = fromJSON("./price-data/daily/eth-price.json")
+eth_data = fromJSON("./price-data/hourly/eth-hour-price.json")
 price_data <- eth_data$prices
 eth_df <- data.frame(timestamp = as.POSIXct(price_data[, 1] / 1000, origin = "1970-01-01"),
                      price = price_data[, 2])
 
-sol_data = fromJSON("./priceData/sol-price.json")
 
+#sol_data = fromJSON("./price-data/daily/sol-price.json")
+sol_data = fromJSON("./price-data/hourly/sol-hour-price.json")
 price_data <- sol_data$prices
 sol_df <- data.frame(timestamp = as.POSIXct(price_data[, 1] / 1000, origin = "1970-01-01"),
                      price = price_data[, 2])
 
-
+#doge_data = fromJSON("./price-data/daily/doge-price.json")
+doge_data = fromJSON("./price-data/hourly/doge-hour-price.json")
+price_data <- doge_data$prices
+doge_df <- data.frame(timestamp = as.POSIXct(price_data[, 1] / 1000, origin = "1970-01-01"),
+                     price = price_data[, 2])
 
 # Function to interpolate hourly data
 interpolate_hourly <- function(df) {
@@ -49,15 +56,15 @@ interpolate_hourly <- function(df) {
 
 # Define calculation functions
 calculate_nav <- function(initial_nav, leverage, price_change) {
-  return(round(initial_nav * (1 + (leverage * price_change)),2))
+  return(initial_nav * (1 + (leverage * price_change)))
 }
 
 calculate_cumulative_change <- function(nav, initial_nav) {
-  return(round(((nav - initial_nav) / initial_nav), 2))
+  return(round(((nav - initial_nav) / initial_nav), 4))
 }
 
 calculate_actual_leverage <- function(basket, price, nav, circulating_supply) {
-  return(round((basket * price) / (nav * circulating_supply), 2))
+  return((basket * price) / (nav * circulating_supply))
 }
 
 
@@ -109,22 +116,28 @@ options(shiny.port = 8180)
 
 ui <- fluidPage(
   tags$head(
-    tags$link(rel = "stylesheet", type="text/css", href = "./styling.css")
+    tags$link(rel = "stylesheet", type="text/css", href = "./styling2.css")
   ),
   
   titlePanel("Bracketed Leverage Token Simulation"),
   sidebarLayout(
     sidebarPanel(
       selectInput("crypto", "Select Token: ", 
-                  choices = list("Bitcoin" = "btc", "Ethereum" = "eth", "Solana" = "sol")),
-      dateInput("start_date", "Start Date:", value = "2023-10-21"),
-      dateInput("end_date", "End Date:", value = "2024-03-05"),
-      numericInput("leverage", "Leverage:", value = 3, min = 1, max = 50, step = 1),
-      numericInput("upperBound", "Upper Bound Increment:", value = 0.2, min = 0.1, max = 50, step = 0.1),
-      numericInput("lowerBound", "Lower Bound Decrement:", value = 0.2, min = 0.1, max = 50, step = 0.1),
-      bsTooltip(list("upperBound", "lowerBound", "leverage"), 
+                  choices = list("Bitcoin" = "btc", "Ethereum" = "eth", "Solana" = "sol", "Doge" = "doge")),
+      dateInput("start_date", "Start Date:", value = "2020-02-10"),
+      dateInput("end_date", "End Date:", value = "2021-11-30"),
+      numericInput("leverage", "Leverage:", value = 5, min = 1, max = 50, step = 1),
+      numericInput("upperBound", "Upper Bound Increment:", value = 1.33, min = 0.1, max = 50, step = 0.1),
+      numericInput("lowerBound", "Lower Bound Decrement:", value = 0.8, min = 0.1, max = 50, step = 0.1),
+      bsTooltip(list("leverage"), 
                 "Values can range from 1 - 50", 
                 "right"),
+      bsTooltip(list("upperBound", "lowerBound"),
+                "Values can range from 0.01 - 50",
+                "right"),
+      bsTooltip(list("start_date", "end_date"),
+                "Displaying over 2 years of data may take longer than 30 seconds.",
+                "down"),
       textOutput("current_range"),
       
       hr(),
@@ -137,7 +150,7 @@ ui <- fluidPage(
       textOutput("sharpe_ratio"),
       textOutput("sortino_ratio"),
       textOutput("omega_ratio"),
-      h4("Notice: This simulation does not take into consideration the transaction fees of rebalancing.")
+      h4("Notice: This simulation does not take into consideration the transaction fees of rebalancing or intraday volatility.")
     ),
     
     mainPanel(
@@ -159,14 +172,16 @@ server <- function(input, output) {
     switch(input$crypto,
            "btc" = btc_df,
            "eth" = eth_df,
-           "sol" = sol_df)
+           "sol" = sol_df,
+           "doge" = doge_df)
   })
   
   get_crypto_name <- reactive({
     switch(input$crypto,
            "btc" = "Bitcoin Price",
            "eth" = "Ethereum Price",
-           "sol" = "Solana Price")
+           "sol" = "Solana Price",
+           "doge" = "Doge Price")
   })
   
   filtered_data <- reactive({
@@ -178,16 +193,17 @@ server <- function(input, output) {
   
   result_data <- reactive({
     df <- filtered_data()
-    hourly_df <- interpolate_hourly(df)
+    hourly_df <- df # interpolate_hourly(df)
     leverage <- input$leverage
     LowerBound <- input$lowerBound
     UpperBound <- input$upperBound
-    simulation_data <- simulate_leverage(hourly_df, leverage, LowerBound, UpperBound)
+    percentage_fee <- input$fee_percentage
+    simulation_data <- simulate_leverage(hourly_df, leverage, LowerBound, UpperBound, percentage_fee)
   })
   
   ### MAIN SIMULATION FUNCTION
   
-  simulate_leverage <- function(hourly_df, leverage, lower, upper) {
+  simulate_leverage <- function(hourly_df, leverage, lower, upper, rebalancing_fee) {
     # Set initial parameters
     initial_nav <- 10
     initial_price <- hourly_df$price[1]
@@ -223,8 +239,10 @@ server <- function(input, output) {
       if (current_leverage >= target_leverage + upper 
           || current_leverage <= target_leverage - lower) {  # Rebalancing threshold
         rebalancing_count <- rebalancing_count + 1
-        target_position <- nav_today * circulating_supply * target_leverage
         current_position <- basket * price_today
+        fee <- current_position * rebalancing_fee
+        
+        target_position <- nav_today * circulating_supply * target_leverage
         
         rebalance_position <- (target_position - current_position) / price_today
         basket <- basket + rebalance_position  # Adjust basket size
@@ -262,9 +280,13 @@ server <- function(input, output) {
   output$price_plot <- renderPlotly({
     data <- result_data()
     chart_title <- get_crypto_name()
+    precision <- 1
+    if (chart_title == "Doge Price") {
+      precision <- 0.0001
+    }
     btc_price_plot <- ggplot(data, aes(x = Date, y = Price)) +
       geom_line(color = "blue") +
-      scale_y_continuous(labels = scales::number_format(accuracy = 1)) +  # Whole numbers without scientific notation
+      scale_y_log10(labels = scales::number_format(accuracy = precision)) +  # Whole numbers without scientific notation
       labs(title = chart_title, y = "Price (USD)") +
       theme_minimal()
   })
@@ -274,9 +296,14 @@ server <- function(input, output) {
     data <- result_data()
     leverage <- input$leverage
     nav_plot_title <- paste("Net Asset Value of", leverage,"x Bracketed Leverage Token")
+    chart_title <- get_crypto_name()
+    precision <- 1
+    if (chart_title == "Doge Price") {
+      precision <- 0.0001
+    }
     nav_plot <- ggplot(data, aes(x = Date, y = NAV)) +
       geom_line(color = "green") +
-      scale_y_continuous(labels = scales::number_format(accuracy = 1)) +  # Whole numbers without scientific notation
+      scale_y_log10(labels = scales::number_format(accuracy = precision)) +  # Whole numbers without scientific notation
       labs(title = nav_plot_title, y = "NAV") +
       theme_minimal()
     ggplotly(nav_plot)
@@ -299,6 +326,7 @@ server <- function(input, output) {
     UpperBound <- leverage + input$upperBound
     paste("Leverage Range:", LowerBound, "-", UpperBound)
   })
+  
   
   # Actual Leverage Plot
   output$leverage_plot <- renderPlotly({
