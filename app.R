@@ -56,7 +56,7 @@ interpolate_hourly <- function(df) {
 
 # Define calculation functions
 calculate_nav <- function(initial_nav, leverage, price_change) {
-  return(round(initial_nav * (1 + (leverage * price_change)), 4))
+  return(initial_nav * (1 + (leverage * price_change)))
 }
 
 calculate_cumulative_change <- function(nav, initial_nav) {
@@ -116,7 +116,7 @@ options(shiny.port = 8180)
 
 ui <- fluidPage(
   tags$head(
-    tags$link(rel = "stylesheet", type="text/css", href = "./styling.css")
+    tags$link(rel = "stylesheet", type="text/css", href = "./styling2.css")
   ),
   
   titlePanel("Bracketed Leverage Token Simulation"),
@@ -124,8 +124,8 @@ ui <- fluidPage(
     sidebarPanel(
       selectInput("crypto", "Select Token: ", 
                   choices = list("Bitcoin" = "btc", "Ethereum" = "eth", "Solana" = "sol", "Doge" = "doge")),
-      dateInput("start_date", "Start Date:", value = "2015-01-01"),
-      dateInput("end_date", "End Date:", value = "2018-01-09"),
+      dateInput("start_date", "Start Date:", value = "2020-02-10"),
+      dateInput("end_date", "End Date:", value = "2021-11-30"),
       numericInput("leverage", "Leverage:", value = 5, min = 1, max = 50, step = 1),
       numericInput("upperBound", "Upper Bound Increment:", value = 1.33, min = 0.1, max = 50, step = 0.1),
       numericInput("lowerBound", "Lower Bound Decrement:", value = 0.8, min = 0.1, max = 50, step = 0.1),
@@ -135,6 +135,9 @@ ui <- fluidPage(
       bsTooltip(list("upperBound", "lowerBound"),
                 "Values can range from 0.01 - 50",
                 "right"),
+      bsTooltip(list("start_date", "end_date"),
+                "Displaying over 2 years of data may take longer than 30 seconds.",
+                "down"),
       textOutput("current_range"),
       
       hr(),
@@ -147,7 +150,7 @@ ui <- fluidPage(
       textOutput("sharpe_ratio"),
       textOutput("sortino_ratio"),
       textOutput("omega_ratio"),
-      h4("Notice: This simulation does not take into consideration the transaction fees of rebalancing or interday volatility.")
+      h4("Notice: This simulation does not take into consideration the transaction fees of rebalancing or intraday volatility.")
     ),
     
     mainPanel(
@@ -277,9 +280,13 @@ server <- function(input, output) {
   output$price_plot <- renderPlotly({
     data <- result_data()
     chart_title <- get_crypto_name()
+    precision <- 1
+    if (chart_title == "Doge Price") {
+      precision <- 0.0001
+    }
     btc_price_plot <- ggplot(data, aes(x = Date, y = Price)) +
       geom_line(color = "blue") +
-      scale_y_log10(labels = scales::number_format(accuracy = 1)) +  # Whole numbers without scientific notation
+      scale_y_log10(labels = scales::number_format(accuracy = precision)) +  # Whole numbers without scientific notation
       labs(title = chart_title, y = "Price (USD)") +
       theme_minimal()
   })
@@ -289,9 +296,14 @@ server <- function(input, output) {
     data <- result_data()
     leverage <- input$leverage
     nav_plot_title <- paste("Net Asset Value of", leverage,"x Bracketed Leverage Token")
+    chart_title <- get_crypto_name()
+    precision <- 1
+    if (chart_title == "Doge Price") {
+      precision <- 0.0001
+    }
     nav_plot <- ggplot(data, aes(x = Date, y = NAV)) +
       geom_line(color = "green") +
-      scale_y_log10(labels = scales::number_format(accuracy = 0.0001)) +  # Whole numbers without scientific notation
+      scale_y_log10(labels = scales::number_format(accuracy = precision)) +  # Whole numbers without scientific notation
       labs(title = nav_plot_title, y = "NAV") +
       theme_minimal()
     ggplotly(nav_plot)
@@ -314,6 +326,7 @@ server <- function(input, output) {
     UpperBound <- leverage + input$upperBound
     paste("Leverage Range:", LowerBound, "-", UpperBound)
   })
+  
   
   # Actual Leverage Plot
   output$leverage_plot <- renderPlotly({

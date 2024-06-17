@@ -3,8 +3,8 @@ body {
     
 }
 
-input {
-  width: 50% !important;
+.well .shiny-input-container {
+    width: 50%;
 }
 
 h4 {
@@ -13,3 +13,4 @@ h4 {
   color: darkred;
   border-radius: 0.3em;
 }
+
