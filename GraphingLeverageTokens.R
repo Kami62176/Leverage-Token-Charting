@@ -8,7 +8,7 @@ library(plotly)
 library(scales)
 
 # Load the JSON data
-btc_data <- fromJSON("./priceData/btc-price.json")
+btc_data <- fromJSON("./price-data/daily/btc-price.json")
 
 # Extract the price data
 price_data <- btc_data$prices
